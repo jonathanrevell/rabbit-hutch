@@ -92,19 +92,26 @@ Hutch.prototype = {
     },
     
     /**
-     * Consumes a single message from a queue, one-at-a-time
+     * Consumes a single message from a queue
      * @param {*} queueName 
-     * @param {*} options - timelimit, channel
+     * @param {*} [options] - timeLimit, channel
      * @param {*} fn 
      */
     consumeQueue: function(queueName, options, fn) {
-        var timelimit   = options.timelimit;
-        var channel     = options.channel || this.channel;
+        // options is optional. If not defined then the 2nd arg is the fn
+        if(fn === undefined) {
+            fn = options;
+            options = {};
+        }
+        var timeLimit       = options.timeLimit;
+        var channel         = options.channel || this.channel;
+        var attemptLimit    = options.attemptLimit || 3;
 
-        if(timelimit === undefined || timelimit === null || isNaN(timelimit)) {
-            timelimit = 1000 * 60 * 5; // Default timelimit is 5 minutes;
+        if(timeLimit === undefined || timeLimit === null || isNaN(timeLimit)) {
+            timeLimit = 1000 * 60 * 5; // Default timeLimit is 5 minutes;
         }
         var setupFn = function (obj, msg, completeAck, completeNack) {
+            var attemptCounter = 0;
             var randomId = Math.random() * 1000;
             LOGGER.queueName = queueName;
             LOGGER.messageId = msg.deliveryTag || `R-${randomId}`;
@@ -122,7 +129,7 @@ Hutch.prototype = {
                     finishType = "timeout/nack";
                     nack(true);
                 }
-            }, timelimit);
+            }, timeLimit);
     
             var ack = () => {
                 if(!finished) {
@@ -156,15 +163,35 @@ Hutch.prototype = {
                 }
             };
     
-            var cancelTimeout = () => {
-                if(timeout) {
-                    clearTimeout(timeout);
-                    timeout = null;
+            var controls = {
+                ack: ack,
+                nack: nack,
+                cancelTimeout: () => {
+                    if(timeout) {
+                        clearTimeout(timeout);
+                        timeout = null;
+                    }
+                },
+    
+                retry: (delay) => {
+                    if(delay === undefined) {
+                        delay = 0;
+                    }
+                    if(attemptCounter < attemptLimit) {
+                        setTimeout(function() {
+                            attemptCounter++;
+                            fn(obj, msg, controls);
+                        }, delay);
+                    }
                 }
             };
+
     
+            
+
             // FUNCTION TO CALL
-            fn(obj, msg, ack, nack, cancelTimeout);
+            attemptCounter++;
+            fn(obj, msg, controls);
         };
         
         // Setup a manual REST route for triggering the action, usually for testing

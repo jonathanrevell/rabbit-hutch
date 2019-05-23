@@ -21,15 +21,34 @@ A wrapper to simplify dealing with multiple RabbitMQ queues or a continous strea
     var hutch = new RabbitHutch("amqp://...");
     hutch.connect()
         .then(channel => {
-            hutch.consumeQueue("my-queue", { timelimit: 1000 * 60 * 3 }, function(data, msg, ack, nack, cancelTimeout) {
+            hutch.consumeQueue("my-queue", { timeLimit: 1000 * 60 * 3 }, function(data, msg, controls) {
                 // Do some work
                 // ...
 
                 // Acknowledge once you've finished
-                ack();
+                controls.ack();
+            })
+
+            // The options argument is optional, you can just go straight to the function if you don't need it.
+            hutch.consumeQueue("another-queue", function(data, msg, controls) {
+
             })
         });
 
+### controls.ack()
+Calls Rabbit MQ's ack function, and also performs some cleanup and completion work inside of Hutch. Calling this will allow the application to process a new message from the queue.
+
+## controls.nack()
+Calls Rabbit MQ's nack function, and also performs some cleanup and completion work inside of Hutch. Calling this will allow the application to process a new message from the queue.
+
+### controls.cancelTimeout()
+If for some reason you don't want the consumer function to be able to timeout for running too long, you can cancel the timeout manually. The timeout normally is in place to cancel a task if it is presumably stuck/frozen.
+
+### controls.retry()
+*controls.retry(delay=0)*
+Hutch provides a method for retrying the consume function, this can be useful if the function had an exception or failure that is temporally limited. (e.g. throttled API call)
+
+The number of times a message will be re-attempted is limited by the attemptLimit option passed into consumeQueue(queue, options). By default the limit 3, which includes the first attempt before any retries.
 
 ## Optional Express Integration
 You may want to be able to run your functions through a REST call, maybe for testing, or maybe for other purposes.
