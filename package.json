@@ -1,0 +1,12 @@
+{
+  "name": "rabbitmq-hutch",
+  "version": "1.0.2",
+  "description": "A wrapper to simplify dealing with multiple RabbitMQ queues and task consumption",
+  "main": "index.js",
+  "repository": "https://github.com/jonathanrevell/rabbit-hutch.git",
+  "author": "Jonathan Oaklyn <jonathan.oaklyn@busyhuman.io>",
+  "license": "MIT",
+  "dependencies": {
+    "amqplib": "^0.5.3"
+  }
+}
