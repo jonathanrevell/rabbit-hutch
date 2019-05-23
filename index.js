@@ -121,51 +121,8 @@ Hutch.prototype = {
     
             var finished = false;
             var finishType = null;
-    
-            var timeout = setTimeout(() => {
-                if(!finished) {
-                    console.warn(`TIMED OUT`);
-                    finished = true;
-                    finishType = "timeout/nack";
-                    nack(true);
-                }
-            }, timeLimit);
-    
-            var ack = () => {
-                if(!finished) {
-                    cancelTimeout();
-                    finished = true;
-                    finishType = "ack";
-                    console.log("---- FINISHED PROCESSING " + queueName + " MESSAGE ----");
-                    LOGGER.queueName = LOGGER.NO_QUEUE;
-                    LOGGER.messageId = null;
-                    return completeAck(msg);
-                } else {
-                    console.warn(`already ${finishType}, cannot ack`);
-                }
-            };
-    
-            var nack = (requeue = false) => {
-                if(!finished) {
-                    cancelTimeout();
-                    finished = true;
-                    finishType = "nack";
-                    console.log(`-- Failed`);
-                    LOGGER.queueName = LOGGER.NO_QUEUE;
-                    LOGGER.messageId = null;                
-                    return completeNack(msg, requeue);
-                } else if(finishType == "timeout/nack") {
-                    LOGGER.queueName = LOGGER.NO_QUEUE;
-                    LOGGER.messageId = null;                
-                    return completeNack(msg, requeue);
-                } else {
-                    console.warn(`already ${finishType}, cannot nack`);
-                }
-            };
-    
+
             var controls = {
-                ack: ack,
-                nack: nack,
                 cancelTimeout: () => {
                     if(timeout) {
                         clearTimeout(timeout);
@@ -186,6 +143,50 @@ Hutch.prototype = {
                 }
             };
 
+    
+            var timeout = setTimeout(() => {
+                if(!finished) {
+                    console.warn(`TIMED OUT`);
+                    finished = true;
+                    finishType = "timeout/nack";
+                    nack(true);
+                }
+            }, timeLimit);
+    
+            var ack = () => {
+                if(!finished) {
+                    controls.cancelTimeout();
+                    finished = true;
+                    finishType = "ack";
+                    console.log("---- FINISHED PROCESSING " + queueName + " MESSAGE ----");
+                    LOGGER.queueName = LOGGER.NO_QUEUE;
+                    LOGGER.messageId = null;
+                    return completeAck(msg);
+                } else {
+                    console.warn(`already ${finishType}, cannot ack`);
+                }
+            };
+    
+            var nack = (requeue = false) => {
+                if(!finished) {
+                    controls.cancelTimeout();
+                    finished = true;
+                    finishType = "nack";
+                    console.log(`-- Failed`);
+                    LOGGER.queueName = LOGGER.NO_QUEUE;
+                    LOGGER.messageId = null;                
+                    return completeNack(msg, requeue);
+                } else if(finishType == "timeout/nack") {
+                    LOGGER.queueName = LOGGER.NO_QUEUE;
+                    LOGGER.messageId = null;                
+                    return completeNack(msg, requeue);
+                } else {
+                    console.warn(`already ${finishType}, cannot nack`);
+                }
+            };
+    
+            controls.ack = ack;
+            controls.nack = nack;
     
             
 
