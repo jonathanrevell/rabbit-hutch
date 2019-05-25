@@ -126,11 +126,11 @@ Hutch.prototype = {
     /**
      * Starts a collector for aggregating data elements; This is useful if you don't want to do something with large amounts of data
      * but don't want to send all the data at once and don't want each item to be send individually
-     * @param {*} sizeLimit 
+     * @param {CollectorOptions} options - {sizeLimit, itemsName}
      * @returns {Collector} returns a new Collector. Use collector.add to add a data item to it. If you are sending the batch to be processed elsewhere you can use {@link RabbitHutch.sendCollectorToQueue}
      */
-    startCollector: function(sizeLimit) {
-        return new Collector(sizeLimit);
+    startCollector: function(options) {
+        return new Collector(options);
     },
 
 

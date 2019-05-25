@@ -35,10 +35,12 @@ A wrapper to simplify dealing with multiple RabbitMQ queues or a continous strea
             })
         });
 
+## hutch.consumeQueue
+
 ### controls.ack()
 Calls Rabbit MQ's ack function, and also performs some cleanup and completion work inside of Hutch. Calling this will allow the application to process a new message from the queue.
 
-## controls.nack()
+### controls.nack()
 Calls Rabbit MQ's nack function, and also performs some cleanup and completion work inside of Hutch. Calling this will allow the application to process a new message from the queue.
 
 ### controls.cancelTimeout()
@@ -49,6 +51,12 @@ If for some reason you don't want the consumer function to be able to timeout fo
 Hutch provides a method for retrying the consume function, this can be useful if the function had an exception or failure that is temporally limited. (e.g. throttled API call)
 
 The number of times a message will be re-attempted is limited by the attemptLimit option passed into consumeQueue(queue, options). By default the limit 3, which includes the first attempt before any retries.
+
+## hutch.startCollector( options )
+Starts a new collector that can be used to aggregate data items together for processing in batches.
+
+## hutch.sendCollectorToQueue( queue, collector, options )
+Sends the collector's items to the specified queue, with the items split up into batches, one batch per message.
 
 ## Optional Express Integration
 You may want to be able to run your functions through a REST call, maybe for testing, or maybe for other purposes.
