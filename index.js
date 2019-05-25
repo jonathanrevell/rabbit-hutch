@@ -1,4 +1,5 @@
 const amqplib = require("amqplib/callback_api");
+const Collector = require("./collector.js");
 
 const LOGGER = {
     originalConsoleLog: console.log,
@@ -120,6 +121,37 @@ Hutch.prototype = {
         console.log(`Sending to other queue ${queue}`, str.substring(0,50));
         channel.assertQueue(queue, { durable: true });
         channel.sendToQueue(queue, Buffer.from(str));  
+    },
+
+    /**
+     * Starts a collector for aggregating data elements; This is useful if you don't want to do something with large amounts of data
+     * but don't want to send all the data at once and don't want each item to be send individually
+     * @param {*} sizeLimit 
+     * @returns {Collector} returns a new Collector. Use collector.add to add a data item to it. If you are sending the batch to be processed elsewhere you can use {@link RabbitHutch.sendCollectorToQueue}
+     */
+    startCollector: function(sizeLimit) {
+        return new Collector(sizeLimit);
+    },
+
+
+    /**
+     * Sends all the data in a collector to a queue. The items are separated into batches which each get their own message
+     * @param {*} queue 
+     * @param {*} collector 
+     * @param {*} options 
+     */
+    sendCollectorToQueue: function(queue, collector, options) {
+        collector.forEach((batch, counter) => {
+            var payload = {
+                timestamp: Date.now(),
+                collectorId: collector.id,
+                batchIndex: counter,
+                totalBatches: collector.batchCount,
+                collectorSize: collector.count
+            };
+            payload[collector.itemsName] = batch.items;
+            this.sendToQueue(queue, payload, options);
+        });        
     },
     
     /**
