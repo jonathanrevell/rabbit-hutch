@@ -117,7 +117,7 @@ Hutch.prototype = {
         var channel     = options.channel || this.channel;
         var str         = JSON.stringify(payload);
 
-        console.log(`Sending to other queue ${queue}`, str);
+        console.log(`Sending to other queue ${queue}`, str.substring(0,50));
         channel.assertQueue(queue, { durable: true });
         channel.sendToQueue(queue, Buffer.from(str));  
     },
