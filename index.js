@@ -6,6 +6,12 @@ const LOGGER = {
     queueName: 'no-queue',
     messageId: null,
     NO_QUEUE: "no-queue",
+    switchOn() {
+        console.log = LOGGER.log;
+    },
+    switchOff() {
+        console.log = LOGGER.originalConsoleLog;
+    },
     log() {
         var args = [];
         if(LOGGER.messageId) {
@@ -24,25 +30,47 @@ const LOGGER = {
 };
 
 /**
+ * @typedef {Object} RabbitHutchOptions
+ * @property {string} channel
+ * @property {Express} expressApp
+ * @property {integer} prefetchLimit
+ * @property {boolean} overrideLogger
+ * 
+ */
+
+/**
+ * @typedef {Object} RabbitHutchConsumeControls
+ * @property {Function} cancelTimeout - Cancels the Timeout protection, allowing the function to run indefinitely
+ * @property {Function} retry - Retries processing the message without requeing it
+ * @property {Function} ack - Acknowledges the message
+ * @property {Function} nack - Negative Acknowledges the message (processing failed)
+ */
+
+
+ /**
+  * @typedef {Function} RabbitHutchConsumeCallback
+  * @param {*} obj 
+  * @param {RabbitMQ.Message} msg fn(obj, msg, controls);
+  * @param {RabbitHutchConsumeControls} controls
+  */
+
+
+
+/**
  * @class RabbitHutch
  * @param {*} url - RabbitMQ endpoint URL
- * @param {*} options - channel, expressApp, prefetchLimit
+ * @param {RabbitHutchOptions} [options]
  */
 const Hutch = function(url, options) {
+    if(options === undefined) {
+        options = {};
+    }
     this.url = url;
 
     this.channel            = options.channel;
     this.expressApp         = options.expressApp;
     this.prefetchLimit      = options.prefetch || 1;
-};
-
-/**
- * (Optional) Helps to clearly identify the origin (task/queue) of all console.log messages
- * Note that this will impact all of your console logging, so unless your application solely/primarily
- * consumes queues you may not want to use this.
- */
-Hutch.replaceStandardLogger =function() {
-   console.log = LOGGER.log;
+    this.overrideLogger     = options.overrideLogger === undefined ? true : options.overrideLogger;
 };
 
 Hutch.prototype = {
@@ -82,7 +110,10 @@ Hutch.prototype = {
      * @param {*} options - channel
      * @param {*} payload 
      */
-    sendToOtherQueue: function( queue, options, payload ) {
+    sendToQueue: function( queue, payload, options ) {
+        if(options === undefined) {
+            options = {};
+        }
         var channel     = options.channel || this.channel;
         var str         = JSON.stringify(payload);
 
@@ -106,6 +137,7 @@ Hutch.prototype = {
         var timeLimit       = options.timeLimit;
         var channel         = options.channel || this.channel;
         var attemptLimit    = options.attemptLimit || 3;
+        var thisHutch = this;
 
         if(timeLimit === undefined || timeLimit === null || isNaN(timeLimit)) {
             timeLimit = 1000 * 60 * 5; // Default timeLimit is 5 minutes;
@@ -115,6 +147,9 @@ Hutch.prototype = {
             var randomId = Math.random() * 1000;
             LOGGER.queueName = queueName;
             LOGGER.messageId = msg.deliveryTag || `R-${randomId}`;
+            if(thisHutch.overrideLogger) {
+                LOGGER.switchOn();
+            }
             
             console.log(`---- START OF ${queueName} MESSAGE ----`);
             console.log(JSON.stringify(obj));
@@ -139,6 +174,8 @@ Hutch.prototype = {
                             attemptCounter++;
                             fn(obj, msg, controls);
                         }, delay);
+                    } else {
+                        controls.nack();
                     }
                 }
             };
@@ -152,6 +189,14 @@ Hutch.prototype = {
                     nack(true);
                 }
             }, timeLimit);
+
+            var cleanup = () => {
+                LOGGER.queueName = LOGGER.NO_QUEUE;
+                LOGGER.messageId = null;
+                if(thisHutch.overrideLogger) {
+                    LOGGER.switchOff();
+                }
+            };
     
             var ack = () => {
                 if(!finished) {
@@ -159,8 +204,7 @@ Hutch.prototype = {
                     finished = true;
                     finishType = "ack";
                     console.log("---- FINISHED PROCESSING " + queueName + " MESSAGE ----");
-                    LOGGER.queueName = LOGGER.NO_QUEUE;
-                    LOGGER.messageId = null;
+                    cleanup();
                     return completeAck(msg);
                 } else {
                     console.warn(`already ${finishType}, cannot ack`);
@@ -173,15 +217,13 @@ Hutch.prototype = {
                     finished = true;
                     finishType = "nack";
                     console.log(`-- Failed`);
-                    LOGGER.queueName = LOGGER.NO_QUEUE;
-                    LOGGER.messageId = null;                
+                    cleanup();               
                     return completeNack(msg, requeue);
                 } else if(finishType == "timeout/nack") {
-                    LOGGER.queueName = LOGGER.NO_QUEUE;
-                    LOGGER.messageId = null;                
+                    cleanup();            
                     return completeNack(msg, requeue);
                 } else {
-                    console.warn(`already ${finishType}, cannot nack`);
+                    console.warn(`${finishType} already ocurred, cannot nack`);
                 }
             };
     
