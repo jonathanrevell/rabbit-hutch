@@ -166,6 +166,8 @@ Hutch.prototype = {
             fn = options;
             options = {};
         }
+
+        var consumerTag     = null;
         var timeLimit       = options.timeLimit;
         var channel         = options.channel || this.channel;
         var attemptLimit    = options.attemptLimit || 3;
@@ -209,6 +211,10 @@ Hutch.prototype = {
                     } else {
                         controls.nack();
                     }
+                },
+
+                stopConsuming: () => {
+                    channel.cancel(consumerTag);
                 }
             };
 
@@ -299,7 +305,47 @@ Hutch.prototype = {
             var obj = JSON.parse(str);
       
             setupFn(obj, msg, completeAck, completeNack);
-        }, { noAck: false });    
+        }, { noAck: false }, function(err, ok) {
+            consumerTag = ok.consumerTag;
+        });
+    },
+
+    /**
+     * @typedef {Function} MultipartMessageFunction
+     * @param {*} data - the data extracted from the message
+     * @param {Rabbit.Message} msg - the full message
+     * @param {RabbitHutchConsumeControls} controls - controls for interacting with RabbitMQ or the consumer service
+     * 
+     * @returns {Promise<Object>} A promise which resolves to an object with a "done" property
+     */
+
+    /**
+     * Consumes multiple messages over time, taking a special action once all the messages are processed
+     * @param {*} queueName - the queue to consume
+     * @param {*} [options] - timeLimit, channel
+     * @param {MultipartMessageFunction} messageFn - the function to execute for every message must return a promise
+     * @param {*} doneFn - the function to execute
+     */
+    consumeQueueMultipart: function(queueName, options, messageFn, doneFn) {
+        this.consumeQueue(queueName, options, function(data, msg, controls) {
+            
+            // We execute a function on each message as it comes in
+            messageFn(data, msg, controls)
+                .then(partResult => {
+
+                    // If the result of the message function indicates all parts of the message
+                    // have been processed, then we execute the done function and pass in the result
+                    // instead of the data
+                    if(partResult.done) {
+                        doneFn(partResult, msg, controls);
+                    } else {
+                        // Generally speaking the messageFn should not ack or nack
+                        controls.ack();
+                    }
+                });
+
+
+        });
     }
 };
 
