@@ -327,6 +327,13 @@ Hutch.prototype = {
      * @param {*} doneFn - the function to execute
      */
     consumeQueueMultipart: function(queueName, options, messageFn, doneFn) {
+        // options is optional. If its not included, reorganize the params
+        if(doneFn === undefined) {
+            doneFn      = messageFn;
+            messageFn   = options;
+            options     = {};
+            
+        }
         this.consumeQueue(queueName, options, function(data, msg, controls) {
             
             // We execute a function on each message as it comes in
