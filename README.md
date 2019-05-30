@@ -92,6 +92,9 @@ Starts a new collector that can be used to aggregate data items together for pro
 ## hutch.sendCollectorToQueue( queue, collector, options )
 Sends the collector's items to the specified queue, with the items split up into batches, one batch per message.
 
+## hutch.sendBatchToQueue(queue, payloadsArray, options)
+Sends an array of messages to a queue
+
 ## Optional Express Integration
 You may want to be able to run your functions through a REST call, maybe for testing, or maybe for other purposes.
 

@@ -108,8 +108,8 @@ Hutch.prototype = {
     /**
      * Sends a message to the specified queue
      * @param {*} queue 
-     * @param {*} options - channel
      * @param {*} payload 
+     * @param {*} [options] - channel
      */
     sendToQueue: function( queue, payload, options ) {
         if(options === undefined) {
@@ -121,6 +121,27 @@ Hutch.prototype = {
         console.log(`Sending to other queue ${queue}`, str.substring(0,50));
         channel.assertQueue(queue, { durable: true });
         channel.sendToQueue(queue, Buffer.from(str));  
+    },
+
+
+    /**
+     * Sends a batch of messages to the queue
+     * @param {*} queue 
+     * @param {Array} payloadsArray 
+     * @param {*} [options] 
+     */
+    sendBatchToQueue: function(queue, payloadsArray, options) {
+        if(options === undefined) {
+            options = {};
+        }
+        var channel     = options.channel || this.channel;
+        
+        channel.assertQueue(queue, { durable: true });
+
+        payloadsArray.forEach(payload => {
+            var str         = JSON.stringify(payload);
+            channel.sendToQueue(queue, Buffer.from(str)); 
+        });
     },
 
     /**
