@@ -68,18 +68,18 @@ The messageFn should determine whether the current message is the "last" message
             process(data);
 
             // 2. Fetch any existing aggregation from this batch
-            var aggregatedResult = fetch();
+            var aggregatedData = fetch();
 
             // 3. Persist the reduction or aggregation of messages
-            save(aggregatedResult);
+            save(aggregatedData);
 
             // 4. return a promise
-            if(aggregatedResult.messageCount == data.totalBatches) {
+            if(aggregatedData.messageCount == data.totalBatches) {
                 allMessagesReceived = true;
             }
-            return Promise.resolve({ done: allMessagesReceived, data: aggregatedResult });
+            return Promise.resolve({ done: allMessagesReceived, data: aggregatedData });
         },
-        function doneFn(partialResult, msg, controls) {
+        function doneFn(aggregatedData, partResult, controls) {
 
         }
     )

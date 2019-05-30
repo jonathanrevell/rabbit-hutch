@@ -344,7 +344,7 @@ Hutch.prototype = {
                     // have been processed, then we execute the done function and pass in the result
                     // instead of the data
                     if(partResult.done) {
-                        doneFn(partResult, msg, controls);
+                        doneFn(partResult.data, partResult, controls);
                     } else {
                         // Generally speaking the messageFn should not ack or nack
                         controls.ack();
