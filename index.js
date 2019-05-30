@@ -207,8 +207,11 @@ Hutch.prototype = {
             }
             
             console.log(`---- START OF ${queueName} MESSAGE ----`);
-            console.log(JSON.stringify(obj).substr(0,50));
-    
+            var messageStr = JSON.stringify(obj);
+            if(messageStr) {
+                console.log(JSON.stringify(obj).substr(0,50));
+            }
+            
             var finished = false;
             var finishType = null;
 
