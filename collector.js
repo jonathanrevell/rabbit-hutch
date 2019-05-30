@@ -25,7 +25,7 @@ function Collector(options) {
     if(!options) {
         options = {};
     }
-    this.id        = Math.random() * 10000;
+    this.id        = `${Math.random() * 10000}`.replace('.','').substr(0,7);
     this.sizeLimit = options.sizeLimit || 50;
     this.itemsName = options.itemsName || "items";
     this.counter   = 0;
