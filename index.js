@@ -198,7 +198,7 @@ Hutch.prototype = {
         }
 
         try  {
-            this.connect({ brief: true })
+            return this.connect({ brief: true })
                 .then(() => {
                     this.briefConnections++;
                     fnResult = fn();
