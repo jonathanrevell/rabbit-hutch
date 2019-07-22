@@ -68,26 +68,73 @@ const Hutch = function(url, options) {
     }
     this.url = url;
 
+    this.connection         = options.connection;
     this.channel            = options.channel;
     this.expressApp         = options.expressApp;
     this.prefetchLimit      = options.prefetch || 1;
     this.overrideLogger     = options.overrideLogger === undefined ? true : options.overrideLogger;
+    this.crashCleanup       = options.crashCleanup === undefined ? true : options.crashCleanup;
+
+    this.briefConnections   = 0;
+    this.hasLongConnection  = false;
+
+    if(this.crashCleanup) {
+        try {
+            var self = this;
+            console.log("RabbitHutch running with crashCleanup enabled. Will close connections on exit");
+
+            // Based on https://stackoverflow.com/a/14032965
+            var exitHandler = function (options, exitCode) {
+                self.disconnect();
+                if (options.cleanup) {
+                    console.log('clean');
+                }
+                if (exitCode || exitCode === 0) { 
+                    console.log(exitCode);
+                }
+                if (options.exit) {
+                    process.exit();
+                }
+            };
+            
+            //do something when app is closing
+            process.on('exit', exitHandler.bind(null,{cleanup:true}));
+            
+            //catches ctrl+c event
+            process.on('SIGINT', exitHandler.bind(null, {exit:true}));
+            
+            // catches "kill pid" (for example: nodemon restart)
+            process.on('SIGUSR1', exitHandler.bind(null, {exit:true}));
+            process.on('SIGUSR2', exitHandler.bind(null, {exit:true}));
+            
+            //catches uncaught exceptions
+            process.on('uncaughtException', exitHandler.bind(null, {exit:true}));   
+        }
+     
+    };
 };
 
 Hutch.prototype = {
     /**
      * Connects to your RabbitMQ endpoint
      */
-    connect: function() {
+    connect: function(options) {
+        if(!options) {
+            options = {};
+        }
         if(!this.channel) {
             return new Promise((resolve, reject) => {
+                if(!options.brief) {
+                    this.hasLongConnection = true;
+                }
                 amqplib.connect(this.url, (err, conn) => {
                     if(err) {
                         console.warn("Failed to connect to Rabbit MQ");
                         console.error(err);
                         reject(err);
                     } else {
-                        conn.createChannel((err, channel) => {
+                        this.connection = conn;
+                        this.connection.createChannel((err, channel) => {
                             if(err) {
                                 console.warn("Failed to create a Rabbit MQ channel");
                                 console.err(err);
@@ -105,6 +152,66 @@ Hutch.prototype = {
             return Promise.resolve(this.channel);
         }
     },
+
+    disconnect: function() {
+        try {
+            if(this.channel) {
+                this.channel.close();
+            }
+            if(this.connection) {
+                this.hasLongConnection = false;
+                this.connection.close();
+            }
+        } catch(err) {
+            console.error(err);
+        }
+    },
+
+    /**
+     * Creates a brief connection with Rabbit which terminates with the resolution of the function passed
+     * You can either return a value or a promise from the function. The connection will close upon completion
+     * This method should be used to wrap calls like "sendToQueue" when you are running in an environment where (1) you don't need to listen to the queue and (2) you only occassionally send messages
+     * @param {*} fn 
+     */
+    briefConnect: function(fn) {
+        if(this.hasLongConnection) {
+            throw "Cannot use briefConnect when a long-lived connection has already been established";
+        }
+
+        var fnResult;
+        function errorHandler(err) {
+            console.warn("briefConnect encountered an error and is closing the connection to Rabbit");
+            console.error(err);
+            attemptCleanup();           
+        }
+
+        // We only disconnect once all brief connectors are finished
+        function attemptCleanup() {
+            this.briefConnections--;
+            if(this.briefConnections <= 0) {
+                this.briefConnections = 0;
+                this.disconnect();
+            }
+        }
+
+        try  {
+            this.connect({ brief: true })
+                .then(() => {
+                    this.briefConnections++;
+                    fnResult = fn();
+                    return Promise.resolve(fnResult);
+                })
+                .then(() => {
+                    attemptCleanup();
+                })
+                .catch(err => {
+                    errorHandler(err);
+                });
+        } catch(err) {
+            errorHandler(err);
+        }
+    },
+
     /**
      * Sends a message to the specified queue
      * @param {*} queue 
@@ -118,7 +225,7 @@ Hutch.prototype = {
         var channel     = options.channel || this.channel;
         var str         = JSON.stringify(payload);
 
-        console.log(`Sending to other queue ${queue}`, str.substring(0,50));
+        console.log(`Sending to queue ${queue}`, str.substring(0,50));
         channel.assertQueue(queue, { durable: true });
         channel.sendToQueue(queue, Buffer.from(str));  
     },
@@ -138,8 +245,9 @@ Hutch.prototype = {
         
         channel.assertQueue(queue, { durable: true });
 
+        console.log(`Sending batch of ${payloadsArray.length} messages to queue`);
         payloadsArray.forEach(payload => {
-            var str         = JSON.stringify(payload);
+            var str = JSON.stringify(payload);
             channel.sendToQueue(queue, Buffer.from(str)); 
         });
     },

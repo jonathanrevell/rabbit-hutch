@@ -37,6 +37,30 @@ A wrapper to simplify dealing with multiple RabbitMQ queues or a continous strea
             })
         });
 
+If you are building a service or program which (1) does not need to listen to any queues, and, (2) only occasionally needs to send messages to Rabbit, you should use the briefConnect method
+
+    hutch.briefConnect(() => {
+        // Do some work
+
+        hutch.sendToQueue("queue-name", payload);
+    });
+
+The briefConnect method will disconnect as soon as the function passed in finishes up its work. If you are doing asynchronous work you should return a promise, which RabbitHutch will wait for to complete before closing the connection.
+
+    hutch.briefConnect(() => {
+        // Do some work
+
+        return asyncWork()
+            .then(() => {
+                hutch.sendToQueue("queue-name", payload);
+                return true;
+            });
+    });
+
+The briefConnect method keeps track of all your briefConnect work and ensures that it doesn't close the connection before all the outstanding work is completed.
+
+**Note:** Do not call briefConnect() while an active connection that was created by calling RabbitHutch.connect() directly is still alive. The two methods should not be used together. Either create a long-living connection by calling RabbitHutch.connect() directly, or create short-lived connections as needed with briefConnect().
+
 ## hutch.consumeQueue(queue, options, fn)
 
 ### controls.ack()
@@ -95,10 +119,17 @@ Sends the collector's items to the specified queue, with the items split up into
 ## hutch.sendBatchToQueue(queue, payloadsArray, options)
 Sends an array of messages to a queue
 
+
+## hutch.briefConnect(fn)
+Creates a short-lived connection to rabbit which will be closed after the passed in function is finished. If you return a promise from the function, RabbitHutch will wait for the promise to resolve or catch before closing the connection. This will also try to prevent closing a short-lived connection before all functions are resolved when there are multiple briefConnect functions running concurrently.
+
 ## Optional Express Integration
 You may want to be able to run your functions through a REST call, maybe for testing, or maybe for other purposes.
 
 If you are using express, or an express-like interface, you can pass it in to get URL endpoints automatically generated for each queue.
+
+    // parse application/json (optional)
+    app.use(bodyParser.json());
 
     var hutch = new RabbitHutch("amqp://...", { expressApp: app });
     hutch.connect()
@@ -110,3 +141,5 @@ If you are using express, or an express-like interface, you can pass it in to ge
     // POST http://<YOUR-DOMAIN>/consume/my-queue
 
 With the express integration, Hutch tries to mimic the normal message queue process as closely as possible, so it is a great way to test your queue consumer functions without having to run the full pipeline.
+
+**Note**: Hutch does not add anything to express, in particular it does not do anything for parsing the body of a POST. If you want to enable this functionality you will have to set up something like [body-parser](https://github.com/expressjs/body-parser) on your express app. The specific setup for your body-parser will depend on how you are posting data to your program.
