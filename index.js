@@ -109,8 +109,11 @@ const Hutch = function(url, options) {
             
             //catches uncaught exceptions
             process.on('uncaughtException', exitHandler.bind(null, {exit:true}));   
+
+        } catch(err) {
+            console.warn("An error occurred while setting up crashCleanup");
+            console.error(err);
         }
-     
     };
 };
 

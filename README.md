@@ -143,3 +143,11 @@ If you are using express, or an express-like interface, you can pass it in to ge
 With the express integration, Hutch tries to mimic the normal message queue process as closely as possible, so it is a great way to test your queue consumer functions without having to run the full pipeline.
 
 **Note**: Hutch does not add anything to express, in particular it does not do anything for parsing the body of a POST. If you want to enable this functionality you will have to set up something like [body-parser](https://github.com/expressjs/body-parser) on your express app. The specific setup for your body-parser will depend on how you are posting data to your program.
+
+## Crash handling
+RabbitHutch will attempt to clean up its connection to Rabbit in the event of an unrecoverable exception, crash, or program exit.
+
+When creating a new RabbitHutch instance you can toggle this functionality off if you don't want it:
+
+    // Turning crash handling off
+    new RabbitHutch("amqp://...", { crashHandling: false });
