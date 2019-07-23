@@ -63,8 +63,11 @@ const LOGGER = {
  * @param {RabbitHutchOptions} [options]
  */
 const Hutch = function(url, options) {
-    if(options === undefined) {
-        options = {};
+    if(!options) {
+        options = {
+            overrideLogger: true,
+            crashCleanup: true
+        };
     }
     this.url = url;
 
@@ -160,10 +163,12 @@ Hutch.prototype = {
         try {
             if(this.channel) {
                 this.channel.close();
+                this.channel = null;
             }
             if(this.connection) {
                 this.hasLongConnection = false;
                 this.connection.close();
+                this.connection = null;
             }
         } catch(err) {
             console.error(err);
