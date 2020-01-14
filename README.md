@@ -37,6 +37,25 @@ A wrapper to simplify dealing with multiple RabbitMQ queues or a continous strea
             })
         });
 
+If there is an error during processing and you need the queue to try the message again, or try the message with another consumer, you can tell it requeue
+
+    const RabbitHutch = require("rabbitmq-hutch");
+    var hutch = new RabbitHutch("amqp://...");
+    hutch.connect()
+        .then(channel => {
+            hutch.consumeQueue("my-queue", { timeLimit: 1000 * 60 * 3 }, function(data, msg, controls) {
+                // Do some work
+                // ...
+
+                // Indicate something went wrong, but you want the message to be re-attempted
+                controls.nack(true);
+                
+                // OR
+                // If passed without any argument, or false, the message will not be requeued for a reattempt
+                controls.nack();
+            })
+        });    
+
 If you are building a service or program which (1) does not need to listen to any queues, and, (2) only occasionally needs to send messages to Rabbit, you should use the briefConnect method
 
     hutch.briefConnect(() => {
