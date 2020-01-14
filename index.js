@@ -1,6 +1,8 @@
 const amqplib = require("amqplib/callback_api");
 const Collector = require("./collector.js");
 
+const DEFAULT_REDUCE_DURATION = 5;
+
 const LOGGER = {
     originalConsoleLog: console.log,
     originalConsoleWarn: console.warn,
@@ -75,6 +77,7 @@ const Hutch = function(url, options) {
     this.channel            = options.channel;
     this.expressApp         = options.expressApp;
     this.prefetchLimit      = options.prefetch || 1;
+    this.debug              = options.debug || false;
     this.overrideLogger     = options.overrideLogger === undefined ? true : options.overrideLogger;
     this.crashCleanup       = options.crashCleanup === undefined ? true : options.crashCleanup;
 
@@ -84,16 +87,18 @@ const Hutch = function(url, options) {
     if(this.crashCleanup) {
         try {
             var self = this;
-            console.log("RabbitHutch running with crashCleanup enabled. Will close connections on exit");
+            if(this.debug) {
+                console.log("RabbitHutch running with crashCleanup enabled. Will close connections on exit");
+            }
 
             // Based on https://stackoverflow.com/a/14032965
             var exitHandler = function (options, exitCode) {
                 self.disconnect();
                 if (options.cleanup) {
-                    console.log('clean');
+                    // console.log('clean');
                 }
                 if (exitCode || exitCode === 0) { 
-                    console.log(exitCode);
+                    // console.log(exitCode);
                 }
                 if (options.exit) {
                     process.exit();
@@ -389,17 +394,17 @@ Hutch.prototype = {
                 }
             };
     
-            var nack = (requeue = false) => {
+            var nack = (options) => {
                 if(!finished) {
                     controls.cancelTimeout();
                     finished = true;
                     finishType = "nack";
                     console.log(`-- Failed`);
                     cleanup();               
-                    return completeNack(msg, requeue);
+                    return completeNack(msg, options);
                 } else if(finishType == "timeout/nack") {
                     cleanup();            
-                    return completeNack(msg, requeue);
+                    return completeNack(msg, options);
                 } else {
                     console.warn(`${finishType} already ocurred, cannot nack`);
                 }
@@ -424,7 +429,22 @@ Hutch.prototype = {
                 };
             
                 var completeAck = (msg) => res.status(200).send(msg);
-                var completeNack = (msg, requeue) => res.status(500).send(msg);
+                var completeNack = (msg, options) => {
+                    var requeue, delay;
+                    if(options === true) {
+                        delay = 0;
+                        requeue = true;
+                    } else if(options) {
+                        delay = options.requeueWithDelay || 0;
+                        if(options.requeue) {
+                            requeue = true;
+                        }                        
+                    }
+
+                    setTimeout(() => {
+                        res.status(500).send(msg);
+                    }, delay);                    
+                };
             
                 setupFn(obj, msg, completeAck, completeNack);
             });
@@ -439,7 +459,22 @@ Hutch.prototype = {
             var str = msg.content.toString();
     
             var completeAck = (msg) => channel.ack(msg);
-            var completeNack = (msg, requeue) => channel.nack(msg, false, requeue);
+            var completeNack = (msg, options) => {
+                var requeue, delay;
+                if(options === true) {
+                    delay = 0;
+                    requeue = true;
+                } else if(options) {
+                    delay = options.requeueWithDelay || 0;
+                    if(options.requeue) {
+                        requeue = true;
+                    }                        
+                }
+
+                setTimeout(() => {
+                    channel.nack(msg, false, requeue);
+                }, delay);                
+            };
     
             // Deserialize
             var obj = JSON.parse(str);
@@ -447,6 +482,25 @@ Hutch.prototype = {
             setupFn(obj, msg, completeAck, completeNack);
         }, { noAck: false }, function(err, ok) {
             consumerTag = ok.consumerTag;
+        });
+    },
+
+    /**
+     * Allows to throttle or reduce messages on a queue for noisy sources
+     * @param {*} queueName 
+     * @param {*} options 
+     */
+    reduceQueue: function(fromQueue, options, fn, finisher) {
+        throw new Error("reduceQueue is not yet implemented");
+        var toQueue     = options.toQueue;
+        var duration    = options.duration || DEFAULT_REDUCE_DURATION;
+
+        this.consumeQueue(fromQueue, consumeOptions, function(data, msg, controls) {
+            var initialResult = fn(data, msg, controls);
+            return Promise.resolve(initialResult)
+                .then(result => {
+                    
+                });
         });
     },
 

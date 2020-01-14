@@ -53,6 +53,14 @@ If there is an error during processing and you need the queue to try the message
                 // OR
                 // If passed without any argument, or false, the message will not be requeued for a reattempt
                 controls.nack();
+
+
+                // OR
+                controls.nack({ requeue: true });
+
+                // OR
+                // Wait ms before queuing it again. This can be helpful for avoiding getting an endless barrage of message
+                controls.nack({ requeueWithDelay: 100 });
             })
         });    
 
