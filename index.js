@@ -409,9 +409,30 @@ Hutch.prototype = {
                     console.warn(`${finishType} already ocurred, cannot nack`);
                 }
             };
+
+            var requeue = (options) => {
+                if(!options) {
+                    options = { requeueWithDelay: 1000 }; 
+                }
+                options.requeue = true;
+                if(!finished) {
+                    controls.cancelTimeout();
+                    finished = true;
+                    finishType = "nack";
+                    console.log(`-- Failed/Requeued`);
+                    cleanup();               
+                    return completeNack(msg, options);
+                } else if(finishType == "timeout/nack") {
+                    cleanup();            
+                    return completeNack(msg, options);
+                } else {
+                    console.warn(`${finishType} already ocurred, cannot nack`);
+                }
+            };
     
             controls.ack = ack;
             controls.nack = nack;
+            controls.requeue = requeue;
     
             
 
@@ -423,30 +444,47 @@ Hutch.prototype = {
         // Setup a manual REST route for triggering the action, usually for testing
         if(this.expressApp) {
             this.expressApp.post(`/consume/${queueName}`, function(req, res) {
-                var obj = req.body;
+                var messageDataObject = req.body;
                 var msg = {
-                    content: obj
+                    content: messageDataObject
                 };
             
                 var completeAck = (msg) => res.status(200).send(msg);
                 var completeNack = (msg, options) => {
-                    var requeue, delay;
+                    var delay, resetData = false, requeue = false;
                     if(options === true) {
                         delay = 0;
                         requeue = true;
+                    } else if(options === false) {
+                        requeue = false;
+                        delay = 0;
                     } else if(options) {
                         delay = options.requeueWithDelay || 0;
-                        if(options.requeue) {
-                            requeue = true;
-                        }                        
+                        if(options.requeue !== undefined) {
+                            requeue = options.requeue;
+                        }     
+                        if(options.resetData !== undefined) {
+                            resetData = options.resetData;
+                        }
+                        if(options.data !== undefined) {
+                            messageDataObject = options.data;
+                            resetData = false;
+                            if(options.resetData !== undefined) {
+                                console.warn("nack option.data implies resetData = false and overrides resetData if set");
+                            }
+                        }
                     }
+
+                    if(requeue && !resetData) {
+                        msg.content = Buffer.from( JSON.stringify( messageDataObject ) );
+                    }                    
 
                     setTimeout(() => {
                         res.status(500).send(msg);
                     }, delay);                    
                 };
             
-                setupFn(obj, msg, completeAck, completeNack);
+                setupFn(messageDataObject, msg, completeAck, completeNack);
             });
         }
 
@@ -457,18 +495,38 @@ Hutch.prototype = {
         channel.assertQueue(queueName, { durable: true });
         channel.consume(queueName, function(msg) {
             var str = msg.content.toString();
+
+            // Deserialize the message payload
+            var messageDataObject = JSON.parse(str);
     
             var completeAck = (msg) => channel.ack(msg);
             var completeNack = (msg, options) => {
-                var requeue, delay;
+                var delay, resetData = false, requeue = false;
                 if(options === true) {
                     delay = 0;
                     requeue = true;
+                } else if(options === false) {
+                    requeue = false;
+                    delay = 0;
                 } else if(options) {
                     delay = options.requeueWithDelay || 0;
-                    if(options.requeue) {
-                        requeue = true;
-                    }                        
+                    if(options.requeue !== undefined) {
+                        requeue = options.requeue;
+                    }     
+                    if(options.resetData !== undefined) {
+                        resetData = options.resetData;
+                    }
+                    if(options.data !== undefined) {
+                        messageDataObject = options.data;
+                        resetData = false;
+                        if(options.resetData !== undefined) {
+                            console.warn("nack option.data implies resetData = false and overrides resetData if set");
+                        }
+                    }
+                }
+
+                if(requeue && !resetData) {
+                    msg.content = Buffer.from( JSON.stringify( messageDataObject ) );
                 }
 
                 setTimeout(() => {
@@ -476,10 +534,9 @@ Hutch.prototype = {
                 }, delay);                
             };
     
-            // Deserialize
-            var obj = JSON.parse(str);
+
       
-            setupFn(obj, msg, completeAck, completeNack);
+            setupFn(messageDataObject, msg, completeAck, completeNack);
         }, { noAck: false }, function(err, ok) {
             consumerTag = ok.consumerTag;
         });

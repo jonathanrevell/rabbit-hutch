@@ -47,6 +47,9 @@ If there is an error during processing and you need the queue to try the message
                 // Do some work
                 // ...
 
+                controls.requeue(options);
+
+                // OR
                 // Indicate something went wrong, but you want the message to be re-attempted
                 controls.nack(true);
                 
@@ -63,6 +66,8 @@ If there is an error during processing and you need the queue to try the message
                 controls.nack({ requeueWithDelay: 100 });
             })
         });    
+
+If you requeue, normally the queue will use the data object it passed in to you to pass back to the queue.
 
 If you are building a service or program which (1) does not need to listen to any queues, and, (2) only occasionally needs to send messages to Rabbit, you should use the briefConnect method
 
