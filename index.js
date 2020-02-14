@@ -232,6 +232,7 @@ Hutch.prototype = {
      * @param {*} [options] - channel
      */
     sendToQueue: function( queue, payload, options ) {
+        validateQueueName(queue);
         if(options === undefined) {
             options = {};
         }
@@ -251,6 +252,7 @@ Hutch.prototype = {
      * @param {*} [options] 
      */
     sendBatchToQueue: function(queue, payloadsArray, options) {
+        validateQueueName(queue);
         if(options === undefined) {
             options = {};
         }
@@ -283,6 +285,7 @@ Hutch.prototype = {
      * @param {*} options 
      */
     sendCollectorToQueue: function(queue, collector, options) {
+        validateQueueName(queue);
         collector.forEach((batch, counter) => {
             var payload = {
                 timestamp: Date.now(),
@@ -303,6 +306,7 @@ Hutch.prototype = {
      * @param {*} fn 
      */
     consumeQueue: function(queueName, options, fn) {
+        validateQueueName(queueName);
         // options is optional. If not defined then the 2nd arg is the fn
         if(fn === undefined) {
             fn = options;
@@ -549,6 +553,7 @@ Hutch.prototype = {
      */
     reduceQueue: function(fromQueue, options, fn, finisher) {
         throw new Error("reduceQueue is not yet implemented");
+        validateQueueName(fromQueue);
         var toQueue     = options.toQueue;
         var duration    = options.duration || DEFAULT_REDUCE_DURATION;
 
@@ -578,6 +583,7 @@ Hutch.prototype = {
      * @param {*} doneFn - the function to execute
      */
     consumeQueueMultipart: function(queueName, options, messageFn, doneFn) {
+        validateQueueName(queueName);
         // options is optional. If its not included, reorganize the params
         if(doneFn === undefined) {
             doneFn      = messageFn;
@@ -606,6 +612,19 @@ Hutch.prototype = {
         });
     }
 };
+
+function validateQueueName(name) {
+    if(name === undefined || name === null) {
+        throw new Error("Queue name cannot be null or undefined");
+    }
+    if(typeof name !== "string") {
+        console.log(name);
+        throw new Error("Queue name must be a string");
+    }
+    if(name.length < 1) {
+        throw new Error("Queue name cannot be an empty string");
+    }
+}
 
 
 module.exports = Hutch;
