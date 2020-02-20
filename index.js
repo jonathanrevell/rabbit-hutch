@@ -442,6 +442,7 @@ Hutch.prototype = {
 
             // FUNCTION TO CALL
             attemptCounter++;
+
             fn(obj, msg, controls);
         };
         
@@ -488,7 +489,14 @@ Hutch.prototype = {
                     }, delay);                    
                 };
             
-                setupFn(messageDataObject, msg, completeAck, completeNack);
+                try {
+                    setupFn(messageDataObject, msg, completeAck, completeNack);
+                    
+                } catch(err) {
+                    console.warn(`An error occurred while processing a message in Queue ${queueName}`);
+                    console.error(err);
+                    controls.nack();
+                }
             });
         }
 
@@ -539,8 +547,14 @@ Hutch.prototype = {
             };
     
 
-      
-            setupFn(messageDataObject, msg, completeAck, completeNack);
+            try {
+                setupFn(messageDataObject, msg, completeAck, completeNack);
+
+            } catch(err) {
+                console.warn(`An error occurred while processing a message in Queue ${queueName}`);
+                console.error(err);
+                controls.nack();
+            }
         }, { noAck: false }, function(err, ok) {
             consumerTag = ok.consumerTag;
         });
