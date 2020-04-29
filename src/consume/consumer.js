@@ -15,6 +15,10 @@ HutchConsumer.prototype.consumeMessage = function(hutchMessage, completeAck, com
     return task.run(hutchMessage);
 };
 
+HutchConsumer.prototype.use = function(plugin, options) {
+    plugin.install(this, options);
+};
+
 
 
 

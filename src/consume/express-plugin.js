@@ -1,7 +1,7 @@
 const {parseAmqMessage, messageFromData, sendDataOnChannel} = require("../message-processor.js");
 
 const expressPlugin = {
-    install(consumer, expressApp) {
+    install(consumer, {expressApp}) {
         expressApp.post(`/consume/${consumer.queueName}`, function(req, res) {
             var hutchMsg = messageFromData(req.body);
         

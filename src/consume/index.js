@@ -30,10 +30,10 @@ Hutch.prototype.consumeQueue = function(queueName, options, fn) {
     var consumer = new HutchConsumer(this, fn, channel, queueName, { attemptLimit, timeLimit });
 
     // Install the default AMQ consumer
-    amqPlugin.install(consumer);
+    consumer.use(amqPlugin);
 
     // Setup a manual REST route for triggering the action, usually for testing
     if(this.expressApp) {
-        expressPlugin.install(consumer, this.expressApp);
+        consumer.use(expressPlugin, {expressApp: this.expressApp});
     }
 };
