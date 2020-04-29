@@ -177,9 +177,38 @@ With the express integration, Hutch tries to mimic the normal message queue proc
 **Note**: Hutch does not add anything to express, in particular it does not do anything for parsing the body of a POST. If you want to enable this functionality you will have to set up something like [body-parser](https://github.com/expressjs/body-parser) on your express app. The specific setup for your body-parser will depend on how you are posting data to your program.
 
 ## Crash handling
+
 RabbitHutch will attempt to clean up its connection to Rabbit in the event of an unrecoverable exception, crash, or program exit.
 
 When creating a new RabbitHutch instance you can toggle this functionality off if you don't want it:
 
     // Turning crash handling off
     new RabbitHutch("amqp://...", { crashHandling: false });
+
+## Call Trees
+
+Starting in RabbitHutch 2.x, messages sent with a type of hutch-message-v2:wrapped can contain a message call tree. Whereas Rabbit sends "messages" to clients to have certain work get done, a call tree allows a hierarchy of messages to be linked on success.
+
+Suppose you have work for a message that cannot be completed or fails, but it could succeed if you run another message to another queue and wait for that to finish. You could poll for it to finish, but is that queue going to process it soon? Do you just freeze this consumer until then?
+
+You could also write some custom logic and add some additional data to your payload so the other queue knows to send a message back to the original queue once it has succeeded, but that couples the queues together more closely and would require special handling for every case.
+
+So instead, the program working the other queue really doesn't need to have any idea about that there is a call tree. Once it finishes RabbitHutch will evaluate the call tree and take care of any nested messages.
+
+## Message Types
+
+### Raw (Legacy)
+
+Message types were not used in versions prior to 1.1.11. If no type is provided on the message properties then it will assume 'raw', which will assume the entire message.content is data for the consuming function. This is synonymous to hutch-message-v1.
+
+### hutch-message-v2
+
+In version 2 messages have the ability to create a meta data wrapper around messages, or to simply pass messages through directly similar to raw.
+
+#### wrapped
+
+Wrapped is a sub-type of hutch-message-v2. The type string will appear as
+
+    hutch-message-v2:wrapped
+
+This gives access to a lot of new features in RabbitHutch including call trees.
