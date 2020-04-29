@@ -1,6 +1,6 @@
 const Hutch = require("./hutch-base.js");
 const {validateQueueName} = require("./util.js");
-const {sendDataOnChannel} = require("./message-processor.js");
+const {HutchMessage, sendDataOnChannel} = require("./message-processor.js");
 
 /**
  * Sends a message to the specified queue
@@ -16,7 +16,11 @@ Hutch.prototype.sendToQueue = function( queue, payload, options ) {
     var channel     = options.channel || this.channel;
 
     channel.assertQueue(queue, { durable: true });
-    sendDataOnChannel(channel, queue, data, options);
+    if(payload instanceof HutchMessage) {
+        payload.sendOnChannel(channel, queue, options);
+    } else {
+        sendDataOnChannel(channel, queue, payload, options);
+    }
 };
 
 
@@ -37,6 +41,10 @@ Hutch.prototype.sendBatchToQueue = function(queue, payloadsArray, options) {
 
     console.log(`Sending batch of ${payloadsArray.length} messages to queue`);
     payloadsArray.forEach(payload => {
-        sendDataOnChannel(channel, queue, payload, options);
+        if(payload instanceof HutchMessage) {
+            payload.sendOnChannel(channel, queue, options);
+        } else {
+            sendDataOnChannel(channel, queue, payload, options);
+        }
     });
 };

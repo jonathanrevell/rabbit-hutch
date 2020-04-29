@@ -15,29 +15,20 @@ function HutchMessage() {
 }
 
 HutchMessage.prototype = {
-    toBuffer() {
-        var str;
-        if(this.type.base === "raw" || (this.type.base === "hutch-message" && this.type.version === 1)) {
-            str = JSON.stringify(this.data);
-            return Buffer.from(str);
-        } else if(this.type.base === "hutch-message" && this.type.version >= 2) {
-            if(this.type.hasSubType('wrapped')) {
-                var wrapper = {
-                    callTree: this.callTree,
-                    data: this.data
-                };
-                str = JSON.stringify(wrapper);
-                return Buffer.from(str);
-            } else {
-                str = JSON.stringify(this.data);
-                return Buffer.from(str);
-            }
-        } else {
-            throw new Error("Unrecognized message type: " + this.raw.properties.type);
-        }
-
+    toAmqMessage() {
+        return {
+            content: this.data,
+            properties: {
+                type: this.type.toString(),
+                headers: this.raw.properties.headers || {}
+            },
+            fields: {}
+        };
     },
-    sendOnChannel(channel, queue) {
+    toBuffer() {
+        return Buffer.from( this.toString() );
+    },
+    sendOnChannel(channel, queue, options={}) {
         console.log(`Sending to queue ${queue}`, this.summaryString());
 
         channel.sendToQueue(queue, this.toBuffer(), { 
@@ -49,7 +40,21 @@ HutchMessage.prototype = {
         return this.toString().substring(0,50);
     },
     toString() {
-        return JSON.stringify(this.data);
+        if(this.type.base === "raw" || (this.type.base === "hutch-message" && this.type.version === 1)) {
+            return JSON.stringify(this.data);
+        } else if(this.type.base === "hutch-message" && this.type.version >= 2) {
+            if(this.type.hasSubType('wrapped')) {
+                var wrapper = {
+                    callTree: this.callTree,
+                    data: this.data
+                };
+                return JSON.stringify(wrapper);
+            } else {
+                return JSON.stringify(this.data);
+            }
+        } else {
+            throw new Error("Unrecognized message type: " + this.raw.properties.type);
+        }
     },
     getHeader(header) {
         try {
@@ -64,8 +69,22 @@ HutchMessage.prototype = {
             this.raw.properties.headers = {};
         }
         this.raw.properties.headers[header] = value;
+    },
+    addToCallTree(message, queueName, options={}) {
+        this.type.assertSubType("wrapped");
+        if(!this.callTree) {
+            this.callTree = [];
+        }
+
+        message.setHeader("call-tree-member", true);
+        message.setHeader("queue-name", queueName);
+        message.setHeader("call-order", options.order || "serial");
+        var amqMessage = message.toAmqMessage();
+
+        this.callTree.push(amqMessage);
     }
 };
+exports.HutchMessage = HutchMessage;
 
 function MessageType(typeString) {
     typeString = typeString.toLowerCase();
@@ -101,7 +120,7 @@ MessageType.prototype.assertSubType = function(str) {
     if(!this.hasSubType(str)) {
         this.subTypes.push(str);
     }
-}
+};
 MessageType.prototype.toString = function() {
     var baseString = `${this.base}-v${this.version}`;
     if(this.subTypes) {
@@ -109,7 +128,7 @@ MessageType.prototype.toString = function() {
     } else {
         return baseString;
     }   
-}
+};
 
 
 function parseAmqMessage(rawMessage) {
@@ -136,6 +155,15 @@ function parseAmqMessage(rawMessage) {
     return msg;
 }
 exports.parseAmqMessage = parseAmqMessage;
+
+function assertMessage(payload) {
+    if(payload instanceof HutchMessage) {
+        return payload;
+    } else {
+        return messageFromData(payload);
+    }
+}
+exports.assertMessage = assertMessage;
 
 function messageFromData(data) {
     var msg     = new HutchMessage();

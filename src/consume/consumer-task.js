@@ -1,7 +1,9 @@
 const LOGGER = require("../log-interceptor.js");
+const {assertMessage} = require("../message-processor.js");
 
 function HutchConsumerTask(consumer, completeAck, completeNack) {
     this.consumer = consumer;
+    this.hutch = this.consumer.hutch;
     this.consumeAck = consumeAck;
     this.consumeNack = consumeNack;
 
@@ -27,7 +29,7 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
             if(attemptCounter < this.consumer.attemptLimit) {
                 setTimeout(function() {
                     attemptCounter++;
-                    fn(obj, msg, controls);
+                    fn(obj, this.message, controls);
                 }, delay);
             } else {
                 this.controls.nack();
@@ -52,7 +54,7 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
     this.cleanup = () => {
         LOGGER.queueName = LOGGER.NO_QUEUE;
         LOGGER.messageId = null;
-        if(this.consumer.hutch.overrideLogger) {
+        if(this.hutch.overrideLogger) {
             LOGGER.switchOff();
         }
     };
@@ -64,7 +66,7 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
             finishType = "ack";
             console.log("---- FINISHED PROCESSING " + this.consumer.queueName + " MESSAGE ----");
             this.cleanup();
-            return completeAck(msg);
+            return completeAck(this.message);
         } else {
             console.warn(`already ${finishType}, cannot ack`);
         }
@@ -77,10 +79,10 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
             finishType = "nack";
             console.log(`-- Failed`);
             this.cleanup();               
-            return completeNack(msg, options);
+            return completeNack(this.message, options);
         } else if(finishType == "timeout/nack") {
             this.cleanup();            
-            return completeNack(msg, options);
+            return completeNack(this.message, options);
         } else {
             console.warn(`${finishType} already ocurred, cannot nack`);
         }
@@ -97,20 +99,36 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
             finishType = "nack";
             console.log(`-- Failed/Requeued`);
             this.cleanup();               
-            return completeNack(msg, options);
+            return completeNack(this.message, options);
         } else if(finishType == "timeout/nack") {
             this.cleanup();            
-            return completeNack(msg, options);
+            return completeNack(this.message, options);
         } else {
             console.warn(`${finishType} already ocurred, cannot nack`);
         }
-    };    
+    };
+    
+    this.controls.forward = (queueName, options) => {
+        console.log(`Forwarding message ${this.message.summaryString()} to queue ${queueName}`);
+        this.hutch.sendToQueue(queueName, this.message, options);
+        return this.controls.ack();
+    };
+
+    this.controls.sendToQueueInCallTree = (queueName, otherPayload, options) => {
+        var otherMessage = assertMessage(otherPayload);
+        
+        otherMessage.addToCallTree(this.message, this.consumer.queue, options);
+        this.hutch.sendToQueue(queueName, otherMessage, options);
+        
+        return this.controls.ack();
+    };
 }
 
 HutchConsumerTask.prototype.run = function(hutchMessage) {
+    this.message = hutchMessage;
     LOGGER.queueName = this.consumer.queueName;
-    LOGGER.messageId = msg.deliveryTag || `R-${this.randomId}`;
-    if(this.consumer.hutch.overrideLogger) {
+    LOGGER.messageId = this.message.deliveryTag || `R-${this.randomId}`;
+    if(this.hutch.overrideLogger) {
         LOGGER.switchOn();
     }
     
