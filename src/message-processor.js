@@ -15,7 +15,7 @@ function HutchMessage() {
 }
 
 HutchMessage.prototype = {
-    toAmqMessage() {
+    toAmqLikeMessage() {
         return {
             content: this.data,
             properties: {
@@ -78,10 +78,13 @@ HutchMessage.prototype = {
 
         message.setHeader("call-tree-member", true);
         message.setHeader("queue-name", queueName);
-        message.setHeader("call-order", options.order || "serial");
-        var amqMessage = message.toAmqMessage();
+        message.setHeader("call-sequence", options.sequence || "serial");
+        var amqMessage = message.toAmqLikeMessage();
 
-        this.callTree.push(amqMessage);
+        this.callTree.unshift(amqMessage);
+    },
+    clearCallTree() {
+        this.callTree = [];
     }
 };
 exports.HutchMessage = HutchMessage;
@@ -117,6 +120,9 @@ MessageType.prototype.hasSubType = function(str) {
     return (this.subTypes.indexOf(str) >= 0);
 };
 MessageType.prototype.assertSubType = function(str) {
+    if(this.base === "raw" || !this.base) {
+        throw new Error("raw messages do not support sub types");
+    }
     if(!this.hasSubType(str)) {
         this.subTypes.push(str);
     }
@@ -129,6 +135,16 @@ MessageType.prototype.toString = function() {
         return baseString;
     }   
 };
+
+function parseAmqLikeMessage(amqLikeMessage) {
+    var msg     = new HutchMessage();
+    msg.raw     = amqLikeMessage;
+
+    msg.data    = amqLikeMessage.content;
+    msg.type = new MessageType(rawMessage.properties.type);
+    return msg;
+}
+exports.parseAmqLikeMessage = parseAmqLikeMessage;
 
 
 function parseAmqMessage(rawMessage) {

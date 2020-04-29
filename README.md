@@ -195,6 +195,83 @@ You could also write some custom logic and add some additional data to your payl
 
 So instead, the program working the other queue really doesn't need to have any idea about that there is a call tree. Once it finishes RabbitHutch will evaluate the call tree and take care of any nested messages.
 
+The easiest way to use a call tree in this scenario is to call controls.sendToQueueInCallTree like in the following example:
+
+    consumeQueue("queue-1", function(data, msg, controls) => {
+        
+        // ... do some work ...
+
+
+        // Something goes wrong
+        if(err) {
+            return controls.sendToQueueInCallTree("fix-it-queue", { fixSomething: "a" });
+        } else {
+            // ... Other normal work ...
+        }
+    });
+
+controls.sendToQueueInCallTree will ack the message once completed. Even though there was a failure or unhealthy state in processing, the message has been 'handled' and presumably the other queue will reconcile any issues.
+
+You can also interface with callTrees outside of this process by directly adding to a callTree from the message
+
+    consumeQueue("queue-1", function(data, msg, controls) => {
+        msg.addToCallTree({ ... data ...}, "ancilliary-queue");
+
+        // ... other work ...
+
+        // Acknowledge the message as normal
+        // The call tree will be processed at after ack is called
+        controls.ack();
+    })
+
+### Call Tree Processing
+
+The callTree on the message currently being consumed is processed when the message is acknowledged (controls.ack NOT controls.nack).
+
+callTree messages can processed in "serial" or in "parallel", which is determined by the "sequence" you pass in on the options argument. If not provided, it will default to "serial".
+
+Each message indicates whether it should be processed serially or in parallel, which can also effect when other messages are processed.
+
+Messages are *always* processed in order, though keep in mind that if the sequence is parallel it doesn't guarantee they will be consumed and executed in the same order by other consumers.
+
+If a message is marked as "serial" then it will be processed, and the remaining messages will remain in the call tree when passed with that message to the next consumer. Parallel messages can be processed at the same time as other parallel messages which form an uninetrrupted sequence in the callTree.
+
+Consider the following diagram. (s) is a serial message, (p) is parallel, and the (-) represents the consumer executing the previous message before continuing on the callTree.
+
+Because messages are processed in order, this means the last parallel message in a sequence of parallel messages will be the one to carry the remaining items in the call tree, if any.
+
+    Example 1. s - s - s - s - s
+    Example 2. ppp - s - pp - s - s
+    Example 3. ppppp
+
+In Example 1, a serial message is sent, we wait for it to be received, consumed and acknowledged, and then send the next serial message in the queue and so on.
+
+In Example 2, 3 parallel messages in a row are sent, then we wait for the third one to complete before sending a serial message, then wait for that to send 2 paralell messages, and so on.
+
+In example 3, 5 paralell messages are sent and the call tree is finished.
+
+***WARNING***: There is a risk that if you requeue your message on failure you could unneccessarily duplicate callTree messages. There is currently not a built-in protection or resolution for this.
+
+## Message Forwarding
+
+Sometimes you may want another queue to handle the message instead, such as in the case if an unrecoverable error occurred but you don't want to just lose the message. This is accomplished with message forwarding.
+
+    consumeQueue("queue-1", function(data, msg, controls) => {
+        
+        // ... do some work ...
+
+
+        // Something goes wrong
+        if(err) {
+            // There is no method for fixing this automatically, forward it for manual review
+            return controls.forward("graveyard");
+        } else {
+            // ... Other normal work ...
+        }
+    });
+
+controls.forward will ack the message once completed. Even though there was a failure or unhealthy state in processing, the message has been 'handled' and presumably after manual review can be resolved in the future.
+
 ## Message Types
 
 ### Raw (Legacy)

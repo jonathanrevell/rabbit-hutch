@@ -1,5 +1,6 @@
 const LOGGER = require("../log-interceptor.js");
 const {assertMessage} = require("../message-processor.js");
+const {processCallTree} = require("./call-tree.js");
 
 function HutchConsumerTask(consumer, completeAck, completeNack) {
     this.consumer = consumer;
@@ -64,6 +65,7 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
             this.controls.cancelTimeout();
             finished = true;
             finishType = "ack";
+            processCallTree(this.hutch, this.message);
             console.log("---- FINISHED PROCESSING " + this.consumer.queueName + " MESSAGE ----");
             this.cleanup();
             return completeAck(this.message);
@@ -119,7 +121,7 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
         
         otherMessage.addToCallTree(this.message, this.consumer.queue, options);
         this.hutch.sendToQueue(queueName, otherMessage, options);
-        
+
         return this.controls.ack();
     };
 }
