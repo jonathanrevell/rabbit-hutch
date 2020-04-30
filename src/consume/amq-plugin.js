@@ -29,7 +29,7 @@ const amqPlugin = {
                         hutchMsg.data = options.data;
                         resetData = false;
                         if(options.resetData !== undefined) {
-                            console.warn("nack option.data implies resetData = false and overrides resetData if set");
+                            console.warn("nack options.data implies resetData = false and overrides resetData if set");
                         }
                     }
                 }
