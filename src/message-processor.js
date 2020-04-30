@@ -25,6 +25,9 @@ HutchMessage.prototype = {
             fields: {}
         };
     },
+    rebuildRaw() {
+        return this.raw;
+    },
     toBuffer() {
         return Buffer.from( this.toString() );
     },
@@ -90,29 +93,32 @@ HutchMessage.prototype = {
 exports.HutchMessage = HutchMessage;
 
 function MessageType(typeString) {
-    typeString = typeString.toLowerCase();
+    typeString = typeString ? typeString.toLowerCase() : undefined;
+    this.subTypes = [];
     if(!typeString || typeString === "raw") {
         this.base = "raw";
         this.version = 1;
-    }
-    var parts = [];
-    var basePart;
-    if(typeString.indexOf(":") >= 0) {
-        parts = typeString.split(":");
-        basePart = parts[0];
-        parts.shift();
-        this.subTypes = parts;
+        
+        
     } else {
-        basePart = typeString;
-        this.subTypes = null;
-    }
-    var versionMatch = VERSION_REGEX.match(basePart);
-    if(versionMatch && versionMatch.length > 1) {
-        this.version = parseInt(versionMatch[1]);
-        this.base = basePart.replace(versionMatch[0], "");
-    } else {
-        this.version = 0;
-        this.base = basePart;
+        var parts = [];
+        var basePart;
+        if(typeString.indexOf(":") >= 0) {
+            parts = typeString.split(":");
+            basePart = parts[0];
+            parts.shift();
+            this.subTypes = parts;
+        } else {
+            basePart = typeString;
+        }
+        var versionMatch = basePart.match(VERSION_REGEX);
+        if(versionMatch && versionMatch.length > 1) {
+            this.version = parseInt(versionMatch[1]);
+            this.base = basePart.replace(versionMatch[0], "");
+        } else {
+            this.version = 0;
+            this.base = basePart;
+        }
     }
 }
 

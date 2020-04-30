@@ -5,8 +5,8 @@ const {processCallTree} = require("./call-tree.js");
 function HutchConsumerTask(consumer, completeAck, completeNack) {
     this.consumer = consumer;
     this.hutch = this.consumer.hutch;
-    this.consumeAck = consumeAck;
-    this.consumeNack = consumeNack;
+    this.completeAck = completeAck;
+    this.completeNack = completeNack;
 
 
     var attemptCounter = 0;

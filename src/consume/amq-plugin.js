@@ -8,7 +8,7 @@ const amqPlugin = {
 
             var hutchMsg = parseAmqMessage(rawMessage);
 
-            var completeAck = (hutchMsg) => consumer.channel.ack(hutchMsg);
+            var completeAck = (hutchMsg) => consumer.channel.ack(hutchMsg.rebuildRaw());
             var completeNack = (hutchMsg, options) => {
                 var delay, resetData = false, requeue = false;
                 if(options === true) {
