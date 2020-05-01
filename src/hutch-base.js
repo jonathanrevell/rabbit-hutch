@@ -19,6 +19,7 @@ const Hutch = function(url, options) {
     this.debug              = options.debug || false;
     this.overrideLogger     = options.overrideLogger === undefined ? true : options.overrideLogger;
     this.crashCleanup       = options.crashCleanup === undefined ? true : options.crashCleanup;
+    this.criticalHandler    = options.criticalHandler;
 
     this.briefConnections   = 0;
     this.hasLongConnection  = false;
@@ -61,7 +62,31 @@ const Hutch = function(url, options) {
             console.warn("An error occurred while setting up crashCleanup");
             console.error(err);
         }
-    };
+    }
 };
+
+
+Hutch.prototype.runCriticalHandler = function(options) {
+    if(this.criticalHandler) {
+        if(typeof this.criticalHandler === "string") {
+            var queueName = this.criticalHandler;
+            if(options.task) {
+                options.task.controls.forward(queueName, { ack: false });
+            } else if(options.message) {
+                this.sendToQueue(queueName, message, options);
+            } else {
+                throw new Error("you must provide either the task or message to runCriticalHandler")
+            }
+        } else if(typeof this.criticalHandler === "function") {
+            this.criticalHandler(this.message);
+        } else {
+            console.log(this.criticalHandler);
+            throw new Error("Unrecognized criticalHandler");
+        }
+    } else {
+        console.warn("No criticalHandler provided to RabbitHutch, controls.critical() and callTree works best with a criticalHandler");
+    }        
+};
+
 
 module.exports = Hutch;

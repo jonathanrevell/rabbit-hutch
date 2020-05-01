@@ -30,3 +30,22 @@ function processCallTree(hutch, message) {
     }
 }
 exports.processCallTree = processCallTree;
+
+
+function nackCallTree(hutch, message, nackOptions={}) {
+    if(!nackOptions.requeue && !nackOptions.purgeQueue) {
+        // Send the messages to cricialHandler
+        
+        if(message.callTree && message.callTree.length > 0) {
+            message.callTree.forEach(message => {
+                var sub = parseAmqLikeMessage(message);
+                hutch.runCriticalHandler({ message: sub });
+            });
+
+            message.callTree = [];
+        }
+    } else if(nackOptions.purgeQueue) {
+        message.callTree = [];
+    }
+}
+exports.nackCallTree = nackCallTree;

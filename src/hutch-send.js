@@ -8,11 +8,8 @@ const {HutchMessage, sendDataOnChannel} = require("./message-processor.js");
  * @param {*} payload 
  * @param {*} [options] - channel
  */
-Hutch.prototype.sendToQueue = function( queue, payload, options ) {
+Hutch.prototype.sendToQueue = function( queue, payload, options={} ) {
     validateQueueName(queue);
-    if(options === undefined) {
-        options = {};
-    }
     var channel     = options.channel || this.channel;
 
     channel.assertQueue(queue, { durable: true });
@@ -30,11 +27,8 @@ Hutch.prototype.sendToQueue = function( queue, payload, options ) {
  * @param {Array} payloadsArray 
  * @param {*} [options] 
  */
-Hutch.prototype.sendBatchToQueue = function(queue, payloadsArray, options) {
+Hutch.prototype.sendBatchToQueue = function(queue, payloadsArray, options={}) {
     validateQueueName(queue);
-    if(options === undefined) {
-        options = {};
-    }
     var channel     = options.channel || this.channel;
     
     channel.assertQueue(queue, { durable: true });

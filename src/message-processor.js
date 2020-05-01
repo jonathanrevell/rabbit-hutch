@@ -1,6 +1,8 @@
 const DEFAULT_MESSAGE_TYPE = "hutch-message-v2";
 const VERSION_REGEX = /-v([0-9]+)$/i;
 
+module.exports.DEFAULT_MESSAGE_TYPE = DEFAULT_MESSAGE_TYPE;
+
 /**
  * @class HutchMessage
  * A more user-friendly, robust message with some utilities
@@ -135,7 +137,7 @@ MessageType.prototype.assertSubType = function(str) {
 };
 MessageType.prototype.toString = function() {
     var baseString = `${this.base}-v${this.version}`;
-    if(this.subTypes) {
+    if(this.subTypes && this.subTypes.length > 0) {
         return `${baseString}:${this.subTypes.join(':')}`;
     } else {
         return baseString;
@@ -147,7 +149,7 @@ function parseAmqLikeMessage(amqLikeMessage) {
     msg.raw     = amqLikeMessage;
 
     msg.data    = amqLikeMessage.content;
-    msg.type = new MessageType(rawMessage.properties.type);
+    msg.type = new MessageType(amqLikeMessage.properties.type);
     return msg;
 }
 exports.parseAmqLikeMessage = parseAmqLikeMessage;
@@ -178,19 +180,21 @@ function parseAmqMessage(rawMessage) {
 }
 exports.parseAmqMessage = parseAmqMessage;
 
-function assertMessage(payload) {
+function assertMessage(payload, options={}) {
     if(payload instanceof HutchMessage) {
         return payload;
     } else {
-        return messageFromData(payload);
+        return messageFromData(payload, options);
     }
 }
 exports.assertMessage = assertMessage;
 
-function messageFromData(data) {
+function messageFromData(data, options={}) {
+    var type    = options.type || "raw";
+
     var msg     = new HutchMessage();
     msg.data    = data;
-    msg.type    = new MessageType("raw");
+    msg.type    = new MessageType(type);
     msg.raw     = {
         content: msg.data,
         properties: {

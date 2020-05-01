@@ -96,21 +96,95 @@ The briefConnect method keeps track of all your briefConnect work and ensures th
 ## hutch.consumeQueue(queue, options, fn)
 
 ### controls.ack()
+
 Calls Rabbit MQ's ack function, and also performs some cleanup and completion work inside of Hutch. Calling this will allow the application to process a new message from the queue.
 
-### controls.nack()
+### controls.nack( options )
+
 Calls Rabbit MQ's nack function, and also performs some cleanup and completion work inside of Hutch. Calling this will allow the application to process a new message from the queue.
 
+Options:
+
+- requeue: false
+
 ### controls.cancelTimeout()
+
 If for some reason you don't want the consumer function to be able to timeout for running too long, you can cancel the timeout manually. The timeout normally is in place to cancel a task if it is presumably stuck/frozen.
 
-### controls.retry()
+### controls.retry( options )
+
 *controls.retry(delay=0)*
 Hutch provides a method for retrying the consume function, this can be useful if the function had an exception or failure that is temporally limited. (e.g. throttled API call)
 
 The number of times a message will be re-attempted is limited by the attemptLimit option passed into consumeQueue(queue, options). By default the limit 3, which includes the first attempt before any retries.
 
+Unlike requeue, this will not send it back to the queue, but will simply attempt the task again after a delay.
+
+### controls.requeue( options )
+
+Send back to the rabbit queue to be processed later and/or on a different channel.
+
+Unlike retry, this performs a nack and you won't know for sure which consumer will pick up the message again or when.
+
+### controls.critical( options )
+
+Indicates that a [Critical Error](#critical-errors) has occurred, meaning it is not expected to succeed on retry or a different consumer instance. If there is a criticalHandler defined for your Hutch instance that will be called. It will also throw a CriticalMessageError and nack the message for you. It will *not* requeue (retry) the message.
+
+You can set 'throw' to off if you want, but its recommended to keep it as is. Keeping throw in should prevent further execution in the function or promise chain, which would be the desired outcome when recognizing the message cannnot be processed as normal.
+
+Options:
+
+- nack: whether to nack (default=true)
+- throw: whether to throw the error or not (default=true)
+
+### controls.catchCritical( error, options )
+
+Drop this into the try/catch or into a catch on a promise chain to simplify handling the error thrown by controls.critical. Just pass the error in to have it properly output and handled (e.g. in cases where a throw could potentially crash your app).
+
+    myPromise.then(() => { 
+        // ... Do some work ...
+        
+        // Something goes wrong
+        controls.critical()
+        
+        // controls.critical will throw
+        // So anything after this won't execute
+
+    })
+    .catch(err => {
+        // If the error is a CriticalMessageError this will handle it and return true
+        if(!controls.catchCritical(err)) {
+            // If you want to use it as part of a conditional block to handle other error types
+        }
+    })
+
+If you need to pass it up through multiple promise levels, you can also use it conditionally rethrow. If the error matches the right type, it will throw it again.
+
+    controls.catchCritical(err, { rethrow: true });
+
+### controls.forward( queueName )
+
+Forward the message to another queue. If another queue needs to do some work with this message, or if there is an error that needs to be processed separately. You can either nack or ack the message. If both ack and nack are true, then nack will take priority.
+
+Options:
+
+- ack: whether to ack (defualt=true)
+- nack: whether to nack (default=false)
+
+### controls.sendToQueueInCallTree( queueName, otherPayload, options)
+
+Shortcut for using a [Call Tree](#call-trees) for error resolution. If you can send a message to another queue to fix an issue preventing this message from fully succeeding, call that message here. The message will be sent with this one (the original one) being attached in the call tree. If that other message succeeds, it will send the original message again.
+
+These can be chained a few times too using the same methodology. If the message you call with this method also needs to send another message before that one can resolve, it can safely call this method itself and the call tree will retain the original message. Like a recusrive function call, it will resolve back up the stack.
+
+The **throw** option allows you to easily fail this message, since most of the time when using this to resolve an issue preventing this message from succeeding, you cannot continue executing until it is resolved. If you don't pass throw, you'll need to manually stop or skip execution on the remainder of your method(s) yourself some way.
+
+**Options:**
+
+- throw: Pass in a truthy value or an error string to have the function throw an error and nack. If you pass in a string it will be the error message. (default:undefined)
+
 ## hutch.consumeQueueMultipart( queue, options, messageFn, doneFn )
+
 Sometimes you may need to wait for other messages to arrive, or may divide a message into multiple parts for easier consumption. Each message is parsed with the messageFn function, which should aggregate or reduce the messages and persist the data elsewhere. messageFn returns a promise which resolves with an object. This object has a "done" property indicating whether all the parts have been received.
 
 The messageFn should determine whether the current message is the "last" message, meaning all messages have been received. 
@@ -226,7 +300,7 @@ You can also interface with callTrees outside of this process by directly adding
 
 ### Call Tree Processing
 
-The callTree on the message currently being consumed is processed when the message is acknowledged (controls.ack NOT controls.nack).
+The callTree on the message currently being consumed is processed when the message is acknowledged (controls.ack). If the current message fails with a nack (and without a requeue), it will handle the rest of the call tree like controls.critical() for each message.
 
 callTree messages can processed in "serial" or in "parallel", which is determined by the "sequence" you pass in on the options argument. If not provided, it will default to "serial".
 
@@ -289,3 +363,23 @@ Wrapped is a sub-type of hutch-message-v2. The type string will appear as
     hutch-message-v2:wrapped
 
 This gives access to a lot of new features in RabbitHutch including call trees.
+
+## Critical Errors
+
+In RabbitHutch, if there is a problem which prevents the consumer from correctly completing the processing of a message *and* cannot be resolved by the program in some way, then we call that **CriticalMessageError**.
+
+These types of errors require manual evaluation by a developer or other technical person to assess and resolve and it is inferred that they are guaranteed to fail on a retry, meaning it will not be requeued.
+
+Critical Errors can be thrown with controls.critical() and are handled as follows:
+
+1. Invoke controls.critical()
+1. IF a criticalHandler was provided to the Hutch instance, it will be called
+1. controls.nack({requeue: false}) is invoked
+1. A CriticalMessageError is thrown
+
+### criticalHandler
+
+The criticalHandler is an option you can pass when you first create your RabbitHutch instance. It can either be a string queueName or it can be a function that you pass in.
+
+If it is a queueName, then the errors will simply be passed through to the other queue. If its a function, the HutchMessage will be passed into it when its called.
+

@@ -6,7 +6,7 @@ function validateQueueName(name) {
         console.log(name);
         throw new Error("Queue name must be a string");
     }
-    if(name.length < 1) {
+    if(name.length < 1 || name.trim() === "") {
         throw new Error("Queue name cannot be an empty string");
     }
 }

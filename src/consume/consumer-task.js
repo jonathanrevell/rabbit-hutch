@@ -1,6 +1,7 @@
 const LOGGER = require("../log-interceptor.js");
-const {assertMessage} = require("../message-processor.js");
-const {processCallTree} = require("./call-tree.js");
+const {assertMessage, DEFAULT_MESSAGE_TYPE} = require("../message-processor.js");
+const {processCallTree, nackCallTree} = require("./call-tree.js");
+const {CriticalMessageError, PendingResolutionError} = require("../errors.js");
 
 function HutchConsumerTask(consumer, completeAck, completeNack) {
     this.consumer = consumer;
@@ -74,15 +75,17 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
         }
     };
 
-    this.controls.nack = (options) => {
+    this.controls.nack = (options={}) => {
         if(!finished) {
             this.controls.cancelTimeout();
             finished = true;
             finishType = "nack";
             console.log(`-- Failed`);
+            nackCallTree(this.hutch, this.message, options);
             this.cleanup();               
             return completeNack(this.message, options);
         } else if(finishType == "timeout/nack") {
+            nackCallTree(this.hutch, this.message, options);
             this.cleanup();            
             return completeNack(this.message, options);
         } else {
@@ -110,19 +113,71 @@ function HutchConsumerTask(consumer, completeAck, completeNack) {
         }
     };
     
-    this.controls.forward = (queueName, options) => {
+    this.controls.forward = (queueName, options={}) => {
         console.log(`Forwarding message ${this.message.summaryString()} to queue ${queueName}`);
         this.hutch.sendToQueue(queueName, this.message, options);
-        return this.controls.ack();
+        if(options.nack === true) {
+            return this.controls.nack();
+        } else if(options.ack === undefined || options.ack === true) {
+            return this.controls.ack();
+        } else {
+            return true;
+        }
     };
 
-    this.controls.sendToQueueInCallTree = (queueName, otherPayload, options) => {
-        var otherMessage = assertMessage(otherPayload);
+    this.controls.sendToQueueInCallTree = (queueName, otherPayload, options={}) => {
+        if(!options.type) {
+            options.type = DEFAULT_MESSAGE_TYPE;
+        }
+
+        var otherMessage = assertMessage(otherPayload, options);
         
-        otherMessage.addToCallTree(this.message, this.consumer.queue, options);
+        
+        otherMessage.addToCallTree(this.message, this.consumer.queueName, options);
         this.hutch.sendToQueue(queueName, otherMessage, options);
 
-        return this.controls.ack();
+        if(options.throw) {
+            var errorMessage;
+            if(typeof options.throw === "string") {
+                errorMessage = options.throw;
+            } else {
+                errorMessage = `This message cannot succeed as-is, resolving using call tree.`;
+            }
+            console.warn(`Sending message to ${queueName} to resolve issue with this one.`);
+            this.controls.nack();
+            throw new PendingResolutionError(errorMessage);
+        } else {
+            return this.controls.ack();
+        }
+    };
+
+    this.controls.critical = (options={}) => {
+        this.hutch.runCriticalHandler({ task: this, ack: false });
+        if(options.nack === undefined || options.nack === true) {
+            this.controls.nack();
+        }
+        if(options.throw === undefined || options.throw === true) {
+            console.log("MESSAGE: ", this.message.toString());
+            throw new CriticalMessageError();
+        } else {
+            console.warn("Critical Message Warning, message could not be processed");
+        }
+    };
+
+    /**
+     * Helper function to simplify catching the error thrown by .critical()
+     */
+    this.controls.catchCritical = (err, options={}) => {
+        if(err instanceof CriticalMessageError) {
+            if(options.rethrow) {
+                throw err;
+            } else {
+                console.error(err);
+                return true;
+            }
+        } else {
+            return false;
+        }
     };
 }
 
